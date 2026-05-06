@@ -18,6 +18,7 @@ export interface GeocodingResult {
 }
 
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
+const NOMINATIM_REVERSE_URL = 'https://nominatim.openstreetmap.org/reverse';
 
 /**
  * Search for places matching a query string.
@@ -58,6 +59,53 @@ export async function geocodeSearch(
     type: r.type,
     importance: r.importance,
   }));
+}
+
+/**
+ * Reverse geocode a lat/lng to a place name via Nominatim.
+ * Returns null if the API has no result for the coordinates (e.g. open ocean).
+ */
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+  signal?: AbortSignal,
+): Promise<GeocodingResult | null> {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lng),
+    format: 'jsonv2',
+    zoom: '14',
+    addressdetails: '1',
+    'accept-language': navigator.language || 'en',
+  });
+
+  const resp = await fetch(`${NOMINATIM_REVERSE_URL}?${params.toString()}`, { signal });
+  if (!resp.ok) throw new Error(`Nominatim error: ${resp.status}`);
+  const data = (await resp.json()) as {
+    lat?: string;
+    lon?: string;
+    display_name?: string;
+    name?: string;
+    type?: string;
+    importance?: number;
+    address?: Record<string, string>;
+    error?: string;
+  };
+
+  if (!data || data.error || !data.display_name) return null;
+
+  return {
+    lat: data.lat ? parseFloat(data.lat) : lat,
+    lng: data.lon ? parseFloat(data.lon) : lng,
+    displayName: data.display_name,
+    shortName: buildShortName({
+      name: data.name,
+      display_name: data.display_name,
+      address: data.address,
+    }),
+    type: data.type ?? 'unknown',
+    importance: data.importance ?? 0,
+  };
 }
 
 function buildShortName(r: {

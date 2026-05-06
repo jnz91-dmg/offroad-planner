@@ -8,6 +8,7 @@ import {
   Marker,
   Tooltip,
   useMap,
+  useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
 import { TILE_LAYERS, DEFAULT_TILE_LAYER, OVERLAY_LAYERS } from '@/lib/config';
@@ -15,6 +16,7 @@ import { usePlannerStore } from '@/stores/planner';
 import type { Coordinate, SurfaceSegment } from '@/lib/types';
 import type { POI } from '@/services/pois';
 import { SURFACES } from '@/services/surface';
+import { reverseGeocode } from '@/services/geocoding';
 
 // ─── Draggable Marker ───
 function DraggableMarker({
@@ -179,6 +181,11 @@ const POI_ICONS: Record<POI['kind'], { symbol: string; color: string }> = {
   pass: { symbol: '\u26F0', color: '#facc15' },          // ⛰ mountain
   viewpoint: { symbol: '\u{1F441}', color: '#60a5fa' },  // 👁 eye
   border: { symbol: '\u{1F6A7}', color: '#f87171' },     // 🚧 barrier
+  fuel: { symbol: '⛽', color: '#fbbf24' },          // ⛽ fuel pump
+  lodging: { symbol: '\u{1F3E8}', color: '#34d399' },    // 🏨 hotel
+  water: { symbol: '\u{1F4A7}', color: '#38bdf8' },      // 💧 droplet
+  mechanic: { symbol: '\u{1F527}', color: '#94a3b8' },   // 🔧 wrench
+  food: { symbol: '\u{1F374}', color: '#fb923c' },       // 🍴 fork & knife
 };
 
 function POIMarker({ poi }: { poi: POI }) {
@@ -203,6 +210,47 @@ function POIMarker({ poi }: { poi: POI }) {
       </Tooltip>
     </Marker>
   );
+}
+
+// ─── Map click → set start location ───
+// Listens for clicks on the map background (marker clicks don't propagate),
+// updates the start location immediately with raw coords, then resolves the
+// place name via reverse geocoding. Toast surfaces friendly status to user.
+function MapClickHandler() {
+  const setStartLocation = usePlannerStore((s) => s.setStartLocation);
+  const setError = usePlannerStore((s) => s.setError);
+  const reqIdRef = useRef(0);
+
+  useMapEvents({
+    click(e) {
+      const { lat, lng } = e.latlng;
+      // Round for a stable display while we await the name
+      const latStr = lat.toFixed(5);
+      const lngStr = lng.toFixed(5);
+      const placeholder = `${latStr}, ${lngStr}`;
+      setStartLocation(lat, lng, placeholder);
+      setError('Locating...');
+
+      const myReqId = ++reqIdRef.current;
+      reverseGeocode(lat, lng)
+        .then((res) => {
+          // Bail if a newer click superseded this one
+          if (myReqId !== reqIdRef.current) return;
+          if (res) {
+            setStartLocation(lat, lng, res.shortName);
+            setError(`Start set: ${res.shortName}`);
+          } else {
+            setError(`Start set: ${placeholder}`);
+          }
+        })
+        .catch(() => {
+          if (myReqId !== reqIdRef.current) return;
+          setError(`Start set: ${placeholder}`);
+        });
+    },
+  });
+
+  return null;
 }
 
 // ─── Fit bounds helper ───
@@ -242,6 +290,7 @@ export default function MapView({
   const overlays = usePlannerStore((s) => s.overlays);
   const pois = usePlannerStore((s) => s.pois);
   const showPois = usePlannerStore((s) => s.showPois);
+  const enabledPoiCategories = usePlannerStore((s) => s.enabledPoiCategories);
   const coloringMode = usePlannerStore((s) => s.coloringMode);
   const routedSegments = usePlannerStore((s) => s.routedSegments);
 
@@ -280,6 +329,8 @@ export default function MapView({
       attributionControl={true}
       style={{ width: '100%', height: '100%' }}
     >
+      <MapClickHandler />
+
       <TileLayer
         key={tileLayerId}
         url={tileConfig.url}
@@ -363,8 +414,8 @@ export default function MapView({
         );
       })()}
 
-      {/* POI markers (peaks, passes, viewpoints, borders) */}
-      {showPois && pois.map((poi) => <POIMarker key={poi.id} poi={poi} />)}
+      {/* POI markers — filtered by per-category visibility */}
+      {showPois && pois.filter((p) => enabledPoiCategories.includes(p.kind)).map((poi) => <POIMarker key={poi.id} poi={poi} />)}
 
       {/* Draggable waypoint markers */}
       {guideWaypoints?.map((wp, i) => (

@@ -2,6 +2,7 @@
 
 import { TILE_LAYERS, OVERLAY_LAYERS } from '@/lib/config';
 import { usePlannerStore } from '@/stores/planner';
+import PoiCategoryToggle from './PoiCategoryToggle';
 
 export default function TileLayerSwitcher() {
   const tileLayer = usePlannerStore((s) => s.tileLayer);
@@ -40,6 +41,9 @@ export default function TileLayerSwitcher() {
           </button>
         ))}
       </div>
+
+      {/* Per-category POI visibility toggles */}
+      <PoiCategoryToggle />
 
       {/* Route coloring mode — only meaningful when a route exists */}
       {generated && (

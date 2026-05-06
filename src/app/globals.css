@@ -808,6 +808,16 @@ body:has(.content-page) {
   border-color: var(--accent) !important;
 }
 
+/* ─── MAP CLICK-TO-SET-START CURSOR CUE ─── */
+.map-panel .leaflet-container,
+.map-panel .leaflet-grab {
+  cursor: crosshair;
+}
+.map-panel .leaflet-dragging .leaflet-container,
+.map-panel .leaflet-dragging .leaflet-grab {
+  cursor: grabbing;
+}
+
 /* ─── LEAFLET DARK THEME OVERRIDES ─── */
 .leaflet-container { background: var(--bg-card); }
 .leaflet-control-zoom a {
@@ -827,3 +837,19 @@ body:has(.content-page) {
 .leaflet-control-attribution a {
   color: rgba(255, 255, 255, 0.4) !important;
 }
+
+/* ── ELEVATION PROFILE ── */
+.elevation-profile {
+  position: relative;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}
+.elevation-profile-svg {
+  display: block;
+  width: 100%;
+}
+

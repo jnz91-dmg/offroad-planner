@@ -1,7 +1,16 @@
 import { create } from 'zustand';
 import { DEFAULTS, DEFAULT_TILE_LAYER, DEFAULT_ROUTE_CHARACTER } from '@/lib/config';
 import type { ColoringMode, Coordinate, DifficultyId, RouteCharacter, SurfaceSegment } from '@/lib/types';
-import type { POI } from '@/services/pois';
+import type { POI, POIKind } from '@/services/pois';
+
+/** Categories enabled by default — kept conservative to avoid clutter. */
+const DEFAULT_ENABLED_POI_CATEGORIES: POIKind[] = [
+  'peak',
+  'pass',
+  'viewpoint',
+  'fuel',
+  'water',
+];
 
 interface PlannerState {
   // Route params
@@ -28,6 +37,7 @@ interface PlannerState {
   overlays: string[]; // enabled overlay tile layer IDs (e.g. 'cycling', 'hiking')
   pois: POI[];
   showPois: boolean;
+  enabledPoiCategories: POIKind[];
   routeCharacter: RouteCharacter;
   coloringMode: ColoringMode;
 
@@ -44,6 +54,7 @@ interface PlannerState {
   toggleOverlay: (id: string) => void;
   setPois: (pois: POI[]) => void;
   toggleShowPois: () => void;
+  togglePoiCategory: (kind: POIKind) => void;
   setRouteCharacter: (c: RouteCharacter) => void;
   setColoringMode: (m: ColoringMode) => void;
   reset: () => void;
@@ -67,6 +78,7 @@ export const usePlannerStore = create<PlannerState>((set, get) => ({
   overlays: [],
   pois: [],
   showPois: true,
+  enabledPoiCategories: [...DEFAULT_ENABLED_POI_CATEGORIES],
   routeCharacter: DEFAULT_ROUTE_CHARACTER,
   coloringMode: 'gradient',
 
@@ -105,6 +117,12 @@ export const usePlannerStore = create<PlannerState>((set, get) => ({
     })),
   setPois: (pois) => set({ pois }),
   toggleShowPois: () => set((s) => ({ showPois: !s.showPois })),
+  togglePoiCategory: (kind) =>
+    set((s) => ({
+      enabledPoiCategories: s.enabledPoiCategories.includes(kind)
+        ? s.enabledPoiCategories.filter((k) => k !== kind)
+        : [...s.enabledPoiCategories, kind],
+    })),
   setRouteCharacter: (c) => set({ routeCharacter: c }),
   setColoringMode: (m) => set({ coloringMode: m }),
 

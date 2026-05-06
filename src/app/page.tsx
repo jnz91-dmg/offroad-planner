@@ -22,6 +22,7 @@ import TileLayerSwitcher from '@/components/TileLayerSwitcher';
 import RouteCharacterPicker from '@/components/RouteCharacterPicker';
 import GradientLegend from '@/components/GradientLegend';
 import Attribution from '@/components/Attribution';
+import ElevationProfile from '@/components/ElevationProfile';
 
 const MapView = dynamic(() => import('@/components/MapView'), { ssr: false });
 
@@ -233,6 +234,10 @@ export default function PlannerPage() {
         </div>
 
         <RouteInfo />
+
+        {store.generated && store.routedCoords && (
+          <ElevationProfile coords={store.routedCoords} />
+        )}
 
         <ActionButtons
           generated={store.generated}
