@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { ROUTING_ENGINE, DIRECTIONS } from '@/lib/config';
+import { ROUTING_ENGINE, DIRECTIONS, DEFAULTS } from '@/lib/config';
 import { usePlannerStore } from '@/stores/planner';
 import type { Coordinate, SurfaceSegment } from '@/lib/types';
 import { generateGuideWaypoints, extractGuidePoints } from '@/services/waypoints';
@@ -32,11 +32,16 @@ export default function PlannerPage() {
   const shuffleSeedRef = useRef(0);
 
   // ─── AUTO-DETECT LOCATION ON FIRST LOAD ───
+  // Geolocation can take several seconds (especially after the permission prompt).
+  // If the user has already searched and picked a different address by the time
+  // it resolves, leave their choice alone — don't clobber it with "Current location".
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        usePlannerStore.getState().setStartLocation(
+        const s = usePlannerStore.getState();
+        if (s.lat !== DEFAULTS.lat || s.lng !== DEFAULTS.lng) return;
+        s.setStartLocation(
           pos.coords.latitude,
           pos.coords.longitude,
           'Current location',

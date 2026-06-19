@@ -41,16 +41,19 @@ export function generateGuideWaypoints(
   const jitter = diff.jitter * ROUTE_CHARACTERS[character].jitterMultiplier;
   const rand = mulberry32(seed || 42);
 
-  const radiusKm = (distance / (Math.PI * 1.6)) * radiusScale;
+  // Total straight-line path ~= 2π * r (circle) + ~1.8r (entry + exit legs from start to circle).
+  // Routed distance is typically 1.3-1.5x straight-line due to road meandering.
+  // Divisor ~8 lands the initial radius close to target so convergence finishes in 1-2 attempts.
+  const radiusKm = (distance / 8) * radiusScale;
   const radiusDeg = radiusKm / 111;
   const headingRad = (heading * Math.PI) / 180;
   const cosLat = Math.cos((lat * Math.PI) / 180);
 
-  // Offset the loop center so the circle sits in the heading direction
-  // from the user's start, then anchor the start as waypoint[0] so the
-  // routed loop actually begins and ends at the chosen address.
-  const centerLat = lat + radiusDeg * Math.cos(headingRad);
-  const centerLng = lng + (radiusDeg * Math.sin(headingRad)) / cosLat;
+  // Offset the loop center half a radius in the heading direction so the
+  // circle sits in front of the rider; anchor the start as waypoint[0]
+  // so the routed loop actually begins and ends at the chosen address.
+  const centerLat = lat + radiusDeg * Math.cos(headingRad) * 0.5;
+  const centerLng = lng + (radiusDeg * Math.sin(headingRad) * 0.5) / cosLat;
 
   const waypoints: Coordinate[] = [[lat, lng]];
   for (let i = 0; i < n; i++) {
