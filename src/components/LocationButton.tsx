@@ -103,16 +103,31 @@ export default function LocationButton() {
   // ─── Collapsed: show current location ───
   if (!expanded) {
     return (
-      <div className="row" onClick={() => setExpanded(true)} style={{ cursor: 'pointer' }}>
+      <button
+        type="button"
+        className="row row-button"
+        onClick={() => setExpanded(true)}
+        title="Search for a place or use your location"
+      >
         <span className="lbl">Start from</span>
         <span className="val">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5">
-            <circle cx="12" cy="12" r="3" fill="var(--accent)" stroke="none" />
-            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" strokeLinecap="round" />
+          <span className="location-name-underline">{locationName}</span>
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--accent)"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
           </svg>
-          <span>{locationName}</span>
         </span>
-      </div>
+      </button>
     );
   }
 
