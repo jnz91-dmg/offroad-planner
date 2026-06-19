@@ -61,6 +61,13 @@ export default function TileLayerSwitcher() {
           >
             Surface
           </button>
+          <button
+            className={`tile-btn ${coloringMode === 'slope' ? 'active' : ''}`}
+            onClick={() => setColoringMode('slope')}
+            title="Signed slope — blue downhill, red uphill"
+          >
+            Slope
+          </button>
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { DEFAULTS, DEFAULT_TILE_LAYER, DEFAULT_ROUTE_CHARACTER } from '@/lib/config';
-import type { ColoringMode, Coordinate, DifficultyId, RouteCharacter, SurfaceSegment } from '@/lib/types';
+import { DEFAULTS, DEFAULT_TILE_LAYER, DEFAULT_ROUTE_CHARACTER, DEFAULT_TRIP_TYPE } from '@/lib/config';
+import type { ColoringMode, Coordinate, DifficultyId, RouteCharacter, SurfaceSegment, TripType } from '@/lib/types';
 import type { POI, POIKind } from '@/services/pois';
 
 /** Categories enabled by default — kept conservative to avoid clutter. */
@@ -39,6 +39,7 @@ interface PlannerState {
   showPois: boolean;
   enabledPoiCategories: POIKind[];
   routeCharacter: RouteCharacter;
+  tripType: TripType;
   coloringMode: ColoringMode;
 
   // Actions
@@ -56,6 +57,7 @@ interface PlannerState {
   toggleShowPois: () => void;
   togglePoiCategory: (kind: POIKind) => void;
   setRouteCharacter: (c: RouteCharacter) => void;
+  setTripType: (t: TripType) => void;
   setColoringMode: (m: ColoringMode) => void;
   reset: () => void;
 }
@@ -80,6 +82,7 @@ export const usePlannerStore = create<PlannerState>((set, get) => ({
   showPois: true,
   enabledPoiCategories: [...DEFAULT_ENABLED_POI_CATEGORIES],
   routeCharacter: DEFAULT_ROUTE_CHARACTER,
+  tripType: DEFAULT_TRIP_TYPE,
   coloringMode: 'gradient',
 
   setDistance: (km) => set({ distance: km }),
@@ -124,6 +127,7 @@ export const usePlannerStore = create<PlannerState>((set, get) => ({
         : [...s.enabledPoiCategories, kind],
     })),
   setRouteCharacter: (c) => set({ routeCharacter: c }),
+  setTripType: (t) => set({ tripType: t }),
   setColoringMode: (m) => set({ coloringMode: m }),
 
   reset: () =>

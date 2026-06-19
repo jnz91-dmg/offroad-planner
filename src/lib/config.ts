@@ -1,4 +1,4 @@
-import type { Direction, DifficultyConfig, DifficultyId, RouteCharacter, TileLayerConfig } from './types';
+import type { Direction, DifficultyConfig, DifficultyId, RouteCharacter, TileLayerConfig, TripType } from './types';
 
 // ─── API KEYS ───
 // GraphHopper: https://www.graphhopper.com/ (free: 500 req/day)
@@ -86,6 +86,12 @@ export const TILE_LAYERS: Record<string, TileLayerConfig & { label: string }> = 
     maxZoom: 17,
     attribution:
       '&copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
+    // CARTO labels reinforce OpenTopoMap's small village/town labels at planning zooms.
+    labelLayer: {
+      url: 'https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_only_labels/{z}/{x}/{y}.png',
+      maxZoom: 18,
+      opacity: 0.85,
+    },
   },
   cyclosm: {
     label: 'Cycle',
@@ -93,6 +99,12 @@ export const TILE_LAYERS: Record<string, TileLayerConfig & { label: string }> = 
     maxZoom: 18,
     attribution:
       '&copy; <a href="https://www.cyclosm.org">CyclOSM</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    // Cycle tiles render town names but they get covered by colored route lines; overlay restores them.
+    labelLayer: {
+      url: 'https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_only_labels/{z}/{x}/{y}.png',
+      maxZoom: 18,
+      opacity: 0.7,
+    },
   },
   osm: {
     label: 'Street',
@@ -100,6 +112,12 @@ export const TILE_LAYERS: Record<string, TileLayerConfig & { label: string }> = 
     maxZoom: 19,
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    // Mapnik already has strong labels; subtle overlay keeps parity with the other layers.
+    labelLayer: {
+      url: 'https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_only_labels/{z}/{x}/{y}.png',
+      maxZoom: 18,
+      opacity: 0.55,
+    },
   },
   satellite: {
     label: 'Satellite',
@@ -155,6 +173,15 @@ export const ROUTE_CHARACTERS: Record<RouteCharacter, { label: string; desc: str
   spurs: { label: 'Spurs', desc: 'Exploration detours', jitterMultiplier: 1.6 },
 };
 export const DEFAULT_ROUTE_CHARACTER: RouteCharacter = 'balanced';
+
+// ─── TRIP TYPE ───
+// Loop: closed circular route (default — what the planner has always done).
+// Out & back: ride the same trail there and back, with a byte-identical return leg.
+export const TRIP_TYPES: Record<TripType, { label: string; desc: string }> = {
+  'loop':         { label: 'Loop',       desc: 'Closed circular route' },
+  'out-and-back': { label: 'Out & back', desc: 'Same trail there and back' },
+};
+export const DEFAULT_TRIP_TYPE: TripType = 'loop';
 
 // ─── DEFAULTS ───
 export const DEFAULTS = {

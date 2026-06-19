@@ -1,5 +1,5 @@
 import { DIFFICULTIES, ROUTE_CHARACTERS } from '@/lib/config';
-import type { Coordinate, DifficultyId, RouteCharacter } from '@/lib/types';
+import type { Coordinate, DifficultyId, RouteCharacter, TripType } from '@/lib/types';
 
 // Seeded pseudo-random so retries produce consistent (but different) waypoints
 function mulberry32(seed: number) {
@@ -12,13 +12,14 @@ function mulberry32(seed: number) {
 }
 
 /**
- * Creates algorithmic control points in a loop shape.
+ * Creates algorithmic control points for either a loop or an out-and-back trip.
  * Pure function — no state reads.
  *
- * @param radiusScale Multiplier applied to the radius. 1.0 = default.
- *   Use < 1.0 to shrink the loop if the previous attempt routed too long.
+ * @param radiusScale Multiplier applied to the radius / one-way length. 1.0 = default.
+ *   Use < 1.0 to shrink if the previous attempt routed too long.
  * @param seed Random seed for jitter — pass same seed to get same waypoints.
  * @param character Route character ('smooth' | 'balanced' | 'spurs') — scales jitter.
+ * @param tripType 'loop' (closed circular) or 'out-and-back' (forward bearing only).
  */
 export function generateGuideWaypoints(
   lat: number,
@@ -29,7 +30,12 @@ export function generateGuideWaypoints(
   radiusScale: number = 1,
   seed: number = 0,
   character: RouteCharacter = 'balanced',
+  tripType: TripType = 'loop',
 ): Coordinate[] {
+  if (tripType === 'out-and-back') {
+    return generateOutAndBackWaypoints(lat, lng, distance, heading, difficulty, radiusScale, seed, character);
+  }
+
   const diff = DIFFICULTIES[difficulty];
   const n = diff.guidePoints;
   const jitter = diff.jitter * ROUTE_CHARACTERS[character].jitterMultiplier;
@@ -56,6 +62,59 @@ export function generateGuideWaypoints(
       centerLat + r * Math.cos(angle + headingRad),
       centerLng + (r * Math.sin(angle + headingRad)) / cosLat,
     ]);
+  }
+  return waypoints;
+}
+
+/**
+ * Generate waypoints along a single forward bearing for an out-and-back trip.
+ * Targets `distance / 2` of forward travel; the return leg is mirrored from the
+ * routed coords client-side (in router.buildOutAndBackPath), giving a byte-identical trail.
+ *
+ * Returns an OPEN array (no closure to start) — the router must NOT append waypoints[0].
+ */
+function generateOutAndBackWaypoints(
+  lat: number,
+  lng: number,
+  distance: number,
+  heading: number,
+  difficulty: DifficultyId,
+  radiusScale: number = 1,
+  seed: number = 0,
+  character: RouteCharacter = 'balanced',
+): Coordinate[] {
+  const diff = DIFFICULTIES[difficulty];
+  const n = Math.max(2, diff.guidePoints);
+  const jitter = diff.jitter * ROUTE_CHARACTERS[character].jitterMultiplier;
+  const rand = mulberry32(seed || 42);
+
+  const oneWayKm = (distance / 2) * radiusScale;
+  const stepKm = oneWayKm / (n - 1);
+  const headingRad = (heading * Math.PI) / 180;
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+
+  // Forward unit vector (per km)
+  const fwdDLatPerKm = Math.cos(headingRad) / 111;
+  const fwdDLngPerKm = Math.sin(headingRad) / (111 * cosLat);
+  // Right-hand perpendicular unit vector (per km) — for lateral jitter
+  const latDLatPerKm = -Math.sin(headingRad) / 111;
+  const latDLngPerKm = Math.cos(headingRad) / (111 * cosLat);
+
+  const waypoints: Coordinate[] = [[lat, lng]]; // start at index 0
+  for (let i = 1; i < n; i++) {
+    const forwardKm = stepKm * i;
+    // Lateral jitter dampens toward both ends so the start and tip stay on bearing.
+    const t = i / (n - 1);
+    const endDamp = Math.sin(t * Math.PI); // 0 at ends, 1 at middle
+    const lateralKm =
+      jitter *
+      stepKm *
+      endDamp *
+      (Math.sin(i * 2.7 + 1.3) * 0.8 + Math.cos(i * 1.9 + rand() * 0.4) * 0.5);
+
+    const dLat = forwardKm * fwdDLatPerKm + lateralKm * latDLatPerKm;
+    const dLng = forwardKm * fwdDLngPerKm + lateralKm * latDLngPerKm;
+    waypoints.push([lat + dLat, lng + dLng]);
   }
   return waypoints;
 }

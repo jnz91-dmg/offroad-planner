@@ -6,7 +6,7 @@ import { ROUTING_ENGINE, DIRECTIONS } from '@/lib/config';
 import { usePlannerStore } from '@/stores/planner';
 import type { Coordinate, SurfaceSegment } from '@/lib/types';
 import { generateGuideWaypoints, extractGuidePoints } from '@/services/waypoints';
-import { routeWaypoints, generateRoundTrip, straightLineFallback } from '@/services/router';
+import { routeWaypoints, routeOutAndBack, generateRoundTrip, straightLineFallback } from '@/services/router';
 import { downloadGPX } from '@/services/gpx';
 import { fetchPOIsAlongRoute } from '@/services/pois';
 
@@ -20,6 +20,7 @@ import Toast from '@/components/Toast';
 import ActionButtons from '@/components/ActionButtons';
 import TileLayerSwitcher from '@/components/TileLayerSwitcher';
 import RouteCharacterPicker from '@/components/RouteCharacterPicker';
+import TripTypePicker from '@/components/TripTypePicker';
 import GradientLegend from '@/components/GradientLegend';
 import Attribution from '@/components/Attribution';
 import ElevationProfile from '@/components/ElevationProfile';
@@ -66,17 +67,20 @@ export default function PlannerPage() {
   // ─── ROUTE + DISPLAY (single attempt, used for waypoint drag) ───
   const performRouting = useCallback(
     async (guideWps: Coordinate[]) => {
-      const { setRouting, setRouteData, setError, difficulty } =
+      const { setRouting, setRouteData, setError, difficulty, tripType } =
         usePlannerStore.getState();
       setRouting(true);
 
       try {
-        const result = await routeWaypoints(guideWps, difficulty);
+        const result =
+          tripType === 'out-and-back'
+            ? await routeOutAndBack(guideWps, difficulty)
+            : await routeWaypoints(guideWps, difficulty);
         setRouteData(guideWps, result.coords, result.distKm, result.segments ?? null);
       } catch (err) {
         console.warn('Routing failed:', err);
         setError('Routing failed \u2014 showing straight lines');
-        const fallback = straightLineFallback(guideWps);
+        const fallback = straightLineFallback(guideWps, tripType === 'loop');
         setRouteData(guideWps, fallback.coords, fallback.distKm, null);
       }
 
@@ -89,7 +93,7 @@ export default function PlannerPage() {
   // Routes iteratively, adjusting radius until the routed distance is close to target.
   // Roads meander, so the initial straight-line radius usually yields a longer route.
   const generateAccurate = useCallback(async (seed: number) => {
-    const { lat, lng, distance, heading, difficulty, routeCharacter, setRouting, setRouteData, setError } =
+    const { lat, lng, distance, heading, difficulty, routeCharacter, tripType, setRouting, setRouteData, setError } =
       usePlannerStore.getState();
     setRouting(true);
 
@@ -100,9 +104,12 @@ export default function PlannerPage() {
     let bestResult: { wps: Coordinate[]; coords: Coordinate[]; distKm: number | null; segments: SurfaceSegment[] | null } | null = null;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const wps = generateGuideWaypoints(lat, lng, distance, heading, difficulty, radiusScale, seed, routeCharacter);
+      const wps = generateGuideWaypoints(lat, lng, distance, heading, difficulty, radiusScale, seed, routeCharacter, tripType);
       try {
-        const result = await routeWaypoints(wps, difficulty);
+        const result =
+          tripType === 'out-and-back'
+            ? await routeOutAndBack(wps, difficulty)
+            : await routeWaypoints(wps, difficulty);
         const routed = result.distKm;
 
         // Track best result seen so far (closest to target)
@@ -137,8 +144,8 @@ export default function PlannerPage() {
     if (bestResult) {
       setRouteData(bestResult.wps, bestResult.coords, bestResult.distKm, bestResult.segments);
     } else {
-      const wps = generateGuideWaypoints(lat, lng, distance, heading, difficulty, 1, seed, routeCharacter);
-      const fallback = straightLineFallback(wps);
+      const wps = generateGuideWaypoints(lat, lng, distance, heading, difficulty, 1, seed, routeCharacter, tripType);
+      const fallback = straightLineFallback(wps, tripType === 'loop');
       setError('Routing failed \u2014 showing straight lines');
       setRouteData(wps, fallback.coords, fallback.distKm, null);
     }
@@ -147,10 +154,12 @@ export default function PlannerPage() {
 
   // ─── GENERATE ───
   const handleGenerate = useCallback(async () => {
-    const { lat, lng, distance, heading, difficulty, setRouting, setRouteData } =
+    const { lat, lng, distance, heading, difficulty, tripType, setRouting, setRouteData } =
       usePlannerStore.getState();
 
-    if (ROUTING_ENGINE === 'graphhopper') {
+    // GraphHopper's round_trip algorithm always returns a closed loop with
+    // a different return path — it cannot do out-and-back. Skip it in that mode.
+    if (ROUTING_ENGINE === 'graphhopper' && tripType === 'loop') {
       setRouting(true);
       try {
         const result = await generateRoundTrip(
@@ -183,7 +192,7 @@ export default function PlannerPage() {
     const s = usePlannerStore.getState();
     downloadGPX(
       s.routedCoords, s.guideWaypoints,
-      s.distance, s.heading, s.difficulty, s.routedDistanceKm,
+      s.distance, s.heading, s.difficulty, s.routedDistanceKm, s.tripType,
     );
   }, []);
 
@@ -221,6 +230,7 @@ export default function PlannerPage() {
         <div className="card">
           <LocationButton />
           <DifficultyPicker />
+          <TripTypePicker />
           <RouteCharacterPicker />
           <div className="comp-sec">
             <div className="comp-hdr">

@@ -2,6 +2,7 @@
 
 import { usePlannerStore } from '@/stores/planner';
 import { SURFACES } from '@/services/surface';
+import { SLOPE_BANDS } from '@/lib/slope';
 
 const GRADIENT_BANDS = [
   { label: '0-3%', desc: 'Flat', color: '#22c55e' },
@@ -23,8 +24,9 @@ const SURFACE_BANDS: Array<{ label: string; desc: string; color: string }> = [
 
 export default function GradientLegend() {
   const mode = usePlannerStore((s) => s.coloringMode);
-  const bands = mode === 'surface' ? SURFACE_BANDS : GRADIENT_BANDS;
-  const title = mode === 'surface' ? 'Surface' : 'Gradient';
+  const bands =
+    mode === 'surface' ? SURFACE_BANDS : mode === 'slope' ? SLOPE_BANDS : GRADIENT_BANDS;
+  const title = mode === 'surface' ? 'Surface' : mode === 'slope' ? 'Slope' : 'Gradient';
 
   return (
     <div className="gradient-legend">

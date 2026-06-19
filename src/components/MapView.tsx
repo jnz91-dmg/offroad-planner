@@ -17,6 +17,7 @@ import type { Coordinate, SurfaceSegment } from '@/lib/types';
 import type { POI } from '@/services/pois';
 import { SURFACES } from '@/services/surface';
 import { reverseGeocode } from '@/services/geocoding';
+import { slopeColor, SLOPE_WINDOW } from '@/lib/slope';
 
 // ─── Draggable Marker ───
 function DraggableMarker({
@@ -164,6 +165,45 @@ function buildGradientSegments(coords: Coordinate[]): GradientSegment[] | null {
   for (let i = 0; i < colors.length; i++) {
     if (colors[i] !== currentColor) {
       // Close segment at the shared point, then start new one from that point
+      currentPositions.push([coords[i][0], coords[i][1]]);
+      segments.push({ positions: currentPositions, color: currentColor });
+      currentColor = colors[i];
+      currentPositions = [[coords[i][0], coords[i][1]]];
+    }
+    currentPositions.push([coords[i + 1][0], coords[i + 1][1]]);
+  }
+  segments.push({ positions: currentPositions, color: currentColor });
+  return segments;
+}
+
+/**
+ * Build polyline segments colored by SIGNED slope (descent vs climb).
+ * Same smoothing logic as buildGradientSegments but feeds slopeColor()
+ * which uses a diverging palette (blue downhill → grey flat → red uphill).
+ */
+function buildSlopeSegments(coords: Coordinate[]): ColoredSegment[] | null {
+  if (coords.length < 2) return null;
+  if (!coords.every((c) => c.length >= 3 && typeof c[2] === 'number')) return null;
+
+  const colors: string[] = [];
+  for (let i = 1; i < coords.length; i++) {
+    let totalDist = 0, totalRise = 0;
+    const lo = Math.max(0, i - SLOPE_WINDOW), hi = Math.min(coords.length - 1, i + SLOPE_WINDOW - 1);
+    for (let j = lo; j < hi; j++) {
+      const d = haversineM(coords[j], coords[j + 1]);
+      if (d === 0) continue;
+      totalDist += d;
+      totalRise += (coords[j + 1][2] as number) - (coords[j][2] as number);
+    }
+    const pct = totalDist > 0 ? (totalRise / totalDist) * 100 : 0;
+    colors.push(slopeColor(pct));
+  }
+
+  const segments: ColoredSegment[] = [];
+  let currentColor = colors[0];
+  let currentPositions: [number, number][] = [[coords[0][0], coords[0][1]]];
+  for (let i = 0; i < colors.length; i++) {
+    if (colors[i] !== currentColor) {
       currentPositions.push([coords[i][0], coords[i][1]]);
       segments.push({ positions: currentPositions, color: currentColor });
       currentColor = colors[i];
@@ -365,13 +405,15 @@ export default function MapView({
         );
       })}
 
-      {/* Route — colored by either gradient (steepness) or surface (track grade) */}
+      {/* Route — colored by gradient (steepness), surface (track grade), or signed slope */}
       {(() => {
         if (!routedCoords || routedCoords.length < 2) return null;
         const segments =
           coloringMode === 'surface'
             ? buildSurfaceSegments(routedCoords, routedSegments || [])
-            : buildGradientSegments(routedCoords);
+            : coloringMode === 'slope'
+              ? buildSlopeSegments(routedCoords)
+              : buildGradientSegments(routedCoords);
 
         if (segments) {
           return (

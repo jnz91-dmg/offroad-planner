@@ -136,12 +136,13 @@ async function tryRouteSegment(
 async function routeViaBRouter(
   waypoints: Coordinate[],
   difficulty: DifficultyId,
+  closeLoop: boolean = true,
 ): Promise<RouteResult> {
   const profile = DIFFICULTIES[difficulty].brouter;
   const fallbackProfile = DIFFICULTIES[difficulty].brouterFallback;
-  const closed = [...waypoints, waypoints[0]];
+  const path = closeLoop ? [...waypoints, waypoints[0]] : waypoints;
 
-  // Center of the loop (used for nudging failed points toward land)
+  // Center of the path (used for nudging failed points toward land)
   const center: Coordinate = [
     waypoints.reduce((s, w) => s + w[0], 0) / waypoints.length,
     waypoints.reduce((s, w) => s + w[1], 0) / waypoints.length,
@@ -152,8 +153,8 @@ async function routeViaBRouter(
   let totalDistM = 0;
   let hasRouted = false;
 
-  for (let i = 0; i < closed.length - 1; i++) {
-    const result = await tryRouteSegment(closed[i], closed[i + 1], center, profile, fallbackProfile);
+  for (let i = 0; i < path.length - 1; i++) {
+    const result = await tryRouteSegment(path[i], path[i + 1], center, profile, fallbackProfile);
     if (result) {
       const skipFirst = i !== 0; // skip duplicated start point except on first iter
       const offset = allCoords.length - (skipFirst ? 1 : 0);
@@ -169,12 +170,31 @@ async function routeViaBRouter(
       }
       hasRouted = true;
     } else {
-      // Final fallback: straight line for this segment only
+      // Final fallback: straight line for this segment only.
       if (i === 0) {
-        allCoords.push(closed[i]);
+        allCoords.push(path[i]);
       }
-      allCoords.push(closed[i + 1]);
+      allCoords.push(path[i + 1]);
       // no surface data for fallback segment
+    }
+  }
+
+  // Fill any 2-tuple coords with elevation from the nearest 3-tuple neighbor.
+  // BRouter occasionally returns endpoints without elevation, and the straight-line
+  // fallback pushes raw [lat, lng] waypoints — both would otherwise collapse the
+  // gradient/slope coloring to a single fallback color over the whole route.
+  let lastEle: number | undefined;
+  for (let i = 0; i < allCoords.length; i++) {
+    if (allCoords[i].length >= 3) {
+      lastEle = allCoords[i][2] as number;
+    } else if (lastEle !== undefined) {
+      allCoords[i] = [allCoords[i][0], allCoords[i][1], lastEle];
+    }
+  }
+  // Backfill any leading 2-tuples (before first known elevation).
+  if (lastEle !== undefined) {
+    for (let i = 0; i < allCoords.length && allCoords[i].length < 3; i++) {
+      allCoords[i] = [allCoords[i][0], allCoords[i][1], lastEle];
     }
   }
 
@@ -209,13 +229,14 @@ function haversineM(a: Coordinate, b: Coordinate): number {
 async function routeViaGraphHopper(
   waypoints: Coordinate[],
   difficulty: DifficultyId,
+  closeLoop: boolean = true,
 ): Promise<RouteResult> {
   const diff = DIFFICULTIES[difficulty];
-  const closed = [...waypoints, waypoints[0]];
+  const ghWaypoints = closeLoop ? [...waypoints, waypoints[0]] : waypoints;
 
   const body: Record<string, unknown> = {
     profile: diff.graphhopper,
-    points: closed.map((wp) => [wp[1], wp[0]]),
+    points: ghWaypoints.map((wp) => [wp[1], wp[0]]),
     points_encoded: false,
     instructions: false,
     elevation: true,
@@ -309,15 +330,66 @@ export async function generateRoundTrip(
 export async function routeWaypoints(
   waypoints: Coordinate[],
   difficulty: DifficultyId,
+  closeLoop: boolean = true,
 ): Promise<RouteResult> {
   if (ROUTING_ENGINE === 'graphhopper') {
-    return routeViaGraphHopper(waypoints, difficulty);
+    return routeViaGraphHopper(waypoints, difficulty, closeLoop);
   }
-  return routeViaBRouter(waypoints, difficulty);
+  return routeViaBRouter(waypoints, difficulty, closeLoop);
+}
+
+// ─── OUT-AND-BACK: mirror forward route so return leg is byte-identical ───
+// The router goes once forward through the open waypoint polyline; we mirror the
+// resulting coords array (dropping the duplicated tip) so the GPX trace overlays
+// itself on the way back — no second routing call, no parallel-track surprises.
+export function buildOutAndBackPath(forward: RouteResult): RouteResult {
+  const fwd = forward.coords;
+  if (fwd.length < 2) return forward;
+
+  const L = fwd.length;
+  // Reverse-leg coords: same coords backwards, dropping the tip (already in fwd)
+  const back = fwd.slice(0, L - 1).reverse();
+  const allCoords: Coordinate[] = [...fwd, ...back];
+
+  // Mirror segments: index i in fwd maps to (2L - 2 - i) in allCoords
+  const fwdSegs = forward.segments ?? [];
+  const M = 2 * L - 2;
+  const backSegs: SurfaceSegment[] = [];
+  for (let i = fwdSegs.length - 1; i >= 0; i--) {
+    const seg = fwdSegs[i];
+    backSegs.push({
+      ...seg,
+      startIdx: M - seg.endIdx,
+      endIdx: M - seg.startIdx,
+    });
+  }
+  const allSegs = [...fwdSegs, ...backSegs];
+
+  const distKm =
+    forward.distKm != null ? parseFloat((forward.distKm * 2).toFixed(1)) : null;
+
+  return { coords: allCoords, distKm, segments: allSegs };
+}
+
+// ─── OUT-AND-BACK: route forward + mirror, in one call ───
+export async function routeOutAndBack(
+  waypoints: Coordinate[],
+  difficulty: DifficultyId,
+): Promise<RouteResult> {
+  const forward = await routeWaypoints(waypoints, difficulty, false);
+  return buildOutAndBackPath(forward);
 }
 
 // ─── FALLBACK: straight lines ───
-export function straightLineFallback(waypoints: Coordinate[]): RouteResult {
-  const closed = [...waypoints, waypoints[0]];
-  return { coords: closed, distKm: null };
+// `closeLoop` matches the routing functions: true → closed polygon, false → out-and-back mirror.
+export function straightLineFallback(
+  waypoints: Coordinate[],
+  closeLoop: boolean = true,
+): RouteResult {
+  if (closeLoop) {
+    return { coords: [...waypoints, waypoints[0]], distKm: null };
+  }
+  // Out-and-back: forward then mirror (drop the tip on the way back)
+  const back = waypoints.slice(0, -1).reverse();
+  return { coords: [...waypoints, ...back], distKm: null };
 }

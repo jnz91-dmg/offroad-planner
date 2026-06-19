@@ -2,6 +2,8 @@ export type Coordinate = [number, number] | [number, number, number]; // [lat, l
 
 export type RouteCharacter = 'smooth' | 'balanced' | 'spurs';
 
+export type TripType = 'loop' | 'out-and-back';
+
 /** Per-segment surface info extracted from BRouter's WayTags. */
 export interface SurfaceSegment {
   /** Index of the first coordinate in `coords` belonging to this segment. */
@@ -23,7 +25,7 @@ export interface RouteResult {
   segments?: SurfaceSegment[];
 }
 
-export type ColoringMode = 'gradient' | 'surface';
+export type ColoringMode = 'gradient' | 'surface' | 'slope';
 
 export interface Direction {
   label: string;
