@@ -46,10 +46,13 @@ export function generateGuideWaypoints(
   const headingRad = (heading * Math.PI) / 180;
   const cosLat = Math.cos((lat * Math.PI) / 180);
 
-  const centerLat = lat + radiusDeg * Math.cos(headingRad) * 0.5;
-  const centerLng = lng + (radiusDeg * Math.sin(headingRad) * 0.5) / cosLat;
+  // Offset the loop center so the circle sits in the heading direction
+  // from the user's start, then anchor the start as waypoint[0] so the
+  // routed loop actually begins and ends at the chosen address.
+  const centerLat = lat + radiusDeg * Math.cos(headingRad);
+  const centerLng = lng + (radiusDeg * Math.sin(headingRad)) / cosLat;
 
-  const waypoints: Coordinate[] = [];
+  const waypoints: Coordinate[] = [[lat, lng]];
   for (let i = 0; i < n; i++) {
     const angle = (2 * Math.PI * i) / n - Math.PI / 2;
     const stretch =
